@@ -19,6 +19,7 @@ define sysctl (
   $prefix  = undef,
   $comment = undef,
   $ensure  = undef,
+  $apply   = true,
 ) {
 
   include '::sysctl::base'
@@ -41,25 +42,30 @@ define sysctl (
       group   => 'root',
       mode    => '0644',
       content => template("${module_name}/sysctl.d-file.erb"),
-      notify  => [
-        Exec["sysctl-${title}"],
-        Exec["update-sysctl.conf-${title}"],
-      ],
+      notify  => $apply ? {
+        true    => [
+            Exec["sysctl-${title}"],
+            Exec["update-sysctl.conf-${title}"],
+          ],
+        default => []
+      },
     }
 
-    # The immediate change + re-check on each run "just in case"
-    exec { "sysctl-${title}":
-      command     => "/sbin/sysctl -p /etc/sysctl.d/${sysctl_d_file}",
-      refreshonly => true,
-      require     => File["/etc/sysctl.d/${sysctl_d_file}"],
-    }
+    if $apply {
+      # The immediate change + re-check on each run "just in case"
+      exec { "sysctl-${title}":
+        command     => "/sbin/sysctl -p /etc/sysctl.d/${sysctl_d_file}",
+        refreshonly => true,
+        require     => File["/etc/sysctl.d/${sysctl_d_file}"],
+      }
 
-    # For the few original values from the main file
-    exec { "update-sysctl.conf-${title}":
-      command     => "sed -i -e 's#^${title} *=.*#${title} = ${value}#' /etc/sysctl.conf",
-      path        => [ '/usr/sbin', '/sbin', '/usr/bin', '/bin' ],
-      refreshonly => true,
-      onlyif      => "grep -E '^${title} *=' /etc/sysctl.conf",
+      # For the few original values from the main file
+      exec { "update-sysctl.conf-${title}":
+        command     => "sed -i -e 's#^${title} *=.*#${title} = ${value}#' /etc/sysctl.conf",
+        path        => [ '/usr/sbin', '/sbin', '/usr/bin', '/bin' ],
+        refreshonly => true,
+        onlyif      => "grep -E '^${title} *=' /etc/sysctl.conf",
+      }
     }
 
   } else {
